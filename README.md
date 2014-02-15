@@ -1,4 +1,10 @@
-gif-4104-tp3
-============
+Pour construire l'exécutable, placez-vous dans le répertoire courant et
+exécutez les commandes suivantes:
 
-Matrix Inversion using Gauss-Jordan
+> mkdir build
+> cd build
+> cmake ..
+> make
+
+Assurez-vous au préalable que la commande cmake est installée sur 
+votre machine.
