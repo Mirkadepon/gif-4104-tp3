@@ -86,13 +86,14 @@ void invertParallel(Matrix& iA) {
 
         // on trouve le q localement (par processus)
         double lMax = 0.0;
+        size_t q = k;
         for(size_t i = k; i < lAI.rows(); ++i) {
             if( (i % ranksize) == myrank) {
 
                 if(fabs(lAI(i,k)) > lMax) {
                     lMax = fabs(lAI(i,k));
+                    q = i;
                 }
-
             }
         }
 
@@ -100,12 +101,48 @@ void invertParallel(Matrix& iA) {
         cout << "Process " << myrank <<  " a trouvé " << lMax <<endl;
 
         data in, out;
-        in.index = myrank;
+        in.index = q;
         in.value = lMax;
 
         //float gMax = 0.0;
-        MPI_Allreduce(&in, &out, iA.rows(), MPI_FLOAT, MPI_MAX, MPI_COMM_WORLD);
-        cout << "Max trouvé " << out.value << endl;
+        MPI_Allreduce(&in, &out, ranksize, MPI_FLOAT_INT, MPI_MAXLOC, MPI_COMM_WORLD);
+        cout << "Max trouvé " << out.value << " " << out.index << endl;
+        q = out.index;
+
+        // broadcast a tous les processus les elements de k a n-1 de l'indice q trouve
+        //std::valarray <double>data;
+        //if(myrank == 0) {
+            //data = iA.getRowCopy(q);
+        //}
+        //int size = lAI.cols()*sizeof(double);
+        //MPI_Bcast(&data, size, MPI_FLOAT, 0, MPI_COMM_WORLD);
+
+
+        // on swap la ligne q avec la ligne k
+        if (q != k) lAI.swapRows(q, k);
+
+        // on normalise la ligne k afin que l'element (k,k) soit egale a 1
+        double lValue = lAI(k, k);
+        for (size_t j=0; j<lAI.cols(); ++j) {
+            // On divise les éléments de la rangée k
+            // par la valeur du pivot.
+            // Ainsi, lAI(k,k) deviendra égal à 1.
+            lAI(k, j) /= lValue;
+        }
+
+        // Pour chaque rangée...
+        for (size_t i=0; i<lAI.rows(); ++i) {
+            if( (i % ranksize) == myrank) {
+                if (i != k) { // ...différente de k
+                    // On soustrait la rangée k
+                    // multipliée par l'élément k de la rangée courante
+                    double lValue = lAI(i, k);
+                    lAI.getRowSlice(i) -= lAI.getRowCopy(k)*lValue;
+                }
+            }
+        }
+
+        cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
 
     }
 
