@@ -4,3 +4,6 @@ Makefile
 cmake_install.cmake
 install_manifest.txt
 build/
+CPackConfig.cmake
+CPackSourceConfig.cmake
+tp3
