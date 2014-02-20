@@ -75,14 +75,14 @@ void invertParallel(Matrix& iA) {
     int myrank, ranksize;
     ranksize = MPI::COMM_WORLD.Get_size(); // nombre de processus
     myrank = MPI::COMM_WORLD.Get_rank(); // numero du processus courant (me)
+    int n = iA.rows();
 
     // vérifier que la matrice est carrée
     assert(iA.rows() == iA.cols());
     // construire la matrice [A I]
     MatrixConcatCols lAI(iA, MatrixIdentity(iA.rows()));
 
-    //for (size_t k=0; k<iA.rows(); ++k) {
-    for (size_t k=0; k<1; ++k) {
+    for (size_t k=0; k<iA.rows(); ++k) {
 
         // on trouve le q localement (par processus)
         double lMax = 0.0;
@@ -98,24 +98,19 @@ void invertParallel(Matrix& iA) {
         }
 
         //cout << "Process " << myrank <<  " a essayé " << i << " " << k << lAI(i,k) <<endl;
-        cout << "Process " << myrank <<  " a trouvé " << lMax <<endl;
+        //cout << "Process " << myrank <<  " a trouvé " << lMax <<endl;
 
         data in, out;
         in.index = q;
         in.value = lMax;
 
-        //float gMax = 0.0;
-        MPI_Allreduce(&in, &out, ranksize, MPI_FLOAT_INT, MPI_MAXLOC, MPI_COMM_WORLD);
-        cout << "Max trouvé " << out.value << " " << out.index << endl;
+        MPI::COMM_WORLD.Allreduce(&in, &out, ranksize, MPI_FLOAT_INT, MPI_MAXLOC);
+        //cout << "Max trouvé " << out.value << " " << out.index << endl;
         q = out.index;
+        int root = q%ranksize;
 
         // broadcast a tous les processus les elements de k a n-1 de l'indice q trouve
-        //std::valarray <double>data;
-        //if(myrank == 0) {
-            //data = iA.getRowCopy(q);
-        //}
-        //int size = lAI.cols()*sizeof(double);
-        //MPI_Bcast(&data, size, MPI_FLOAT, 0, MPI_COMM_WORLD);
+        MPI::COMM_WORLD.Bcast(&lAI(q,0), lAI.cols(), MPI::DOUBLE, root);
 
 
         // on swap la ligne q avec la ligne k
@@ -142,9 +137,44 @@ void invertParallel(Matrix& iA) {
             }
         }
 
-        cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
 
     }
+
+    //typedef struct databag {
+            //int index;
+            //int data;
+    //} row;
+
+    //const int nitems=2;
+    //int blocklengths[2] = {1,1};
+    //MPI_Datatype types[2] = {MPI_INT, MPI_INT};
+    //MPI_Datatype mpi_car_type;
+    //MPI_Aint     offsets[2];
+
+    //offsets[0] = offsetof(car, shifts);
+    //offsets[1] = offsetof(car, topSpeed);
+
+    //MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_car_type);
+    //MPI_Type_commit(&mpi_car_type);
+
+    //for(int r = 1; r < ranksize; r++) {
+        //for(i = 0; i < lAI.rows(); i++) {
+            //if( (i % ranksize) == myrank) {
+                //COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
+            //}
+        //}
+    //}
+
+    // gatherv attempt
+    //int *displs,i,*rcounts;
+    //int stride = lAI.rows()*ranksize;
+    //for (i=0; i<ranksize; ++i) {
+      //displs[i] = 0;
+      //rcounts[i] = 0;
+    //}
+    //MPI::COMM_WORLD.Gatherv(&lAI(0,0), 0, MPI_DOUBLE, &lAI, rcounts, displs, MPI_DOUBLE, 0 );
+
+    cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
 
     MPI::COMM_WORLD.Barrier();
 
@@ -183,31 +213,37 @@ int main(int argc, char** argv) {
     // on initialise une matrix sequential et parallel pour comparaison
     Matrix mainMatrixSequential = Matrix(lS, lS);
     Matrix mainMatrixParallel = Matrix(lS, lS);
-    MatrixRandom lAPara(lS, lS);
 
+
+
+    //
     // section sequentielle
+    //
     MatrixRandom lA(lS, lS);
     //cout << "Matrice random:\n" << lA.str() << endl;
-
     mainMatrixSequential = lA;
-
     invertSequential(mainMatrixSequential);
     //cout << "Matrice inverse:\n" << mainMatrixSequential.str() << endl;
-
     Matrix lRes = multiplyMatrix(lA, mainMatrixSequential);
     //cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-
-    // only rank 0 initialize the matrix
     //cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
 
-
+    //
     // section parallele
+    //
     MPI::Init();
 
     ranksize = MPI::COMM_WORLD.Get_size();
     myrank = MPI::COMM_WORLD.Get_rank();
 
-    mainMatrixParallel = lAPara; // init parallel matrix to compare both
+    if ( myrank == 0 ) {
+        // seul le root creer la matrice random, puis on a la broadcast
+        MatrixRandom lAPara(lS, lS);
+        mainMatrixParallel = lAPara;
+    }
+    // on bcast la matrice random nouvellement creer
+    MPI::COMM_WORLD.Bcast(&mainMatrixParallel(0,0), lS*lS, MPI::DOUBLE, 0);
+
     // inversion de la matrice parallel
     invertParallel(mainMatrixParallel);
 
