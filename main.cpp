@@ -140,41 +140,21 @@ void invertParallel(Matrix& iA) {
 
     }
 
-    //typedef struct databag {
-            //int index;
-            //int data;
-    //} row;
+    // now we want to gather all the rows to process 0
+    for(size_t i = 0; i<lAI.rows(); ++i) {
+        if( (i % ranksize) == myrank && myrank != 0) {
+            cout << "Rnk " << myrank << " envoie ligne " << i << endl;
+            MPI::COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
+        }
+        else if( (i % ranksize) != myrank && myrank == 0) {
+            cout << "Rnk " << myrank << " recoit ligne " << i << endl;
+            MPI::COMM_WORLD.Recv(&lAI(i,0), lAI.cols(), MPI_DOUBLE, MPI_ANY_SOURCE, 1234);
+        }
+    }
 
-    //const int nitems=2;
-    //int blocklengths[2] = {1,1};
-    //MPI_Datatype types[2] = {MPI_INT, MPI_INT};
-    //MPI_Datatype mpi_car_type;
-    //MPI_Aint     offsets[2];
-
-    //offsets[0] = offsetof(car, shifts);
-    //offsets[1] = offsetof(car, topSpeed);
-
-    //MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_car_type);
-    //MPI_Type_commit(&mpi_car_type);
-
-    //for(int r = 1; r < ranksize; r++) {
-        //for(i = 0; i < lAI.rows(); i++) {
-            //if( (i % ranksize) == myrank) {
-                //COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
-            //}
-        //}
-    //}
-
-    // gatherv attempt
-    //int *displs,i,*rcounts;
-    //int stride = lAI.rows()*ranksize;
-    //for (i=0; i<ranksize; ++i) {
-      //displs[i] = 0;
-      //rcounts[i] = 0;
-    //}
-    //MPI::COMM_WORLD.Gatherv(&lAI(0,0), 0, MPI_DOUBLE, &lAI, rcounts, displs, MPI_DOUBLE, 0 );
-
-    cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
+    if(myrank == 0) {
+        cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
+    }
 
     MPI::COMM_WORLD.Barrier();
 
