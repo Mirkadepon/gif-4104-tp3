@@ -82,7 +82,8 @@ void invertParallel(Matrix& iA) {
     // construire la matrice [A I]
     MatrixConcatCols lAI(iA, MatrixIdentity(iA.rows()));
 
-    for (size_t k=0; k<iA.rows(); ++k) {
+    for (size_t k=0; k < 1; ++k) {
+    //for (size_t k=0; k < lAI.rows(); ++k) {
 
         // on trouve le q localement (par processus)
         double lMax = 0.0;
@@ -112,6 +113,8 @@ void invertParallel(Matrix& iA) {
         // broadcast a tous les processus les elements de k a n-1 de l'indice q trouve
         MPI::COMM_WORLD.Bcast(&lAI(q,0), lAI.cols(), MPI::DOUBLE, root);
 
+        // vérifier que la matrice n'est pas singulière
+        if (lAI(q, k) == 0) throw runtime_error("Matrix not invertible");
 
         // on swap la ligne q avec la ligne k
         if (q != k) lAI.swapRows(q, k);
@@ -119,44 +122,56 @@ void invertParallel(Matrix& iA) {
         // on normalise la ligne k afin que l'element (k,k) soit egale a 1
         double lValue = lAI(k, k);
         for (size_t j=0; j<lAI.cols(); ++j) {
-            // On divise les éléments de la rangée k
-            // par la valeur du pivot.
-            // Ainsi, lAI(k,k) deviendra égal à 1.
             lAI(k, j) /= lValue;
         }
 
-        // Pour chaque rangée...
+        //// Pour chaque rangée...
         for (size_t i=0; i<lAI.rows(); ++i) {
             if( (i % ranksize) == myrank) {
                 if (i != k) { // ...différente de k
                     // On soustrait la rangée k
                     // multipliée par l'élément k de la rangée courante
                     double lValue = lAI(i, k);
+                    cout << "process " << myrank << " soustrait la rangée " << i << " par le k " << lValue << endl;
                     lAI.getRowSlice(i) -= lAI.getRowCopy(k)*lValue;
                 }
             }
         }
 
 
-    }
-
-    // now we want to gather all the rows to process 0
-    for(size_t i = 0; i<lAI.rows(); ++i) {
-        if( (i % ranksize) == myrank && myrank != 0) {
-            cout << "Rnk " << myrank << " envoie ligne " << i << endl;
-            MPI::COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
+        MPI::COMM_WORLD.Barrier();
+        for(int i = 0; i < lAI.rows(); ++i) {
+            if( (i % ranksize) == myrank) {
+                MPI::COMM_WORLD.Bcast(&lAI(i,0), lAI.cols(), MPI::DOUBLE, myrank);
+            }
         }
-        else if( (i % ranksize) != myrank && myrank == 0) {
-            cout << "Rnk " << myrank << " recoit ligne " << i << endl;
-            MPI::COMM_WORLD.Recv(&lAI(i,0), lAI.cols(), MPI_DOUBLE, MPI_ANY_SOURCE, 1234);
-        }
+        MPI::COMM_WORLD.Barrier();
+
     }
 
-    if(myrank == 0) {
-        cout << "\nMatrice parallele test:\n" << lAI.str() << endl;
-    }
+    //MPI::COMM_WORLD.Gather(&lAI(myrank,0), lAI.cols(), MPI_DOUBLE, &lAI(myrank,0), lAI.cols(), MPI_DOUBLE, 0);
 
+    //cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
+
+     //now we want to gather all the rows to process 0
+    //for(size_t i = 0; i<lAI.rows(); ++i) {
+        //if( (i % ranksize) == myrank && myrank != 0) {
+            //cout << "Rnk " << myrank << " envoie ligne " << i << endl;
+            //MPI::COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
+        //}
+        //else if( (i % ranksize) != myrank && myrank == 0) {
+            //cout << "Rnk " << myrank << " recoit ligne " << i << endl;
+            //MPI::COMM_WORLD.Recv(&lAI(i,0), lAI.cols(), MPI_DOUBLE, MPI_ANY_SOURCE, 1234);
+        //}
+    //}
+
+
+
+    //if(myrank == 1) {
+        cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
+    //}
     MPI::COMM_WORLD.Barrier();
+
 
 }
 
