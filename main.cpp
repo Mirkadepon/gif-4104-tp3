@@ -98,15 +98,11 @@ void invertParallel(Matrix& iA) {
             }
         }
 
-        //cout << "Process " << myrank <<  " a essayé " << i << " " << k << lAI(i,k) <<endl;
-        //cout << "Process " << myrank <<  " a trouvé " << lMax <<endl;
-
         data in, out;
         in.index = q;
         in.value = lMax;
 
         MPI::COMM_WORLD.Allreduce(&in, &out, ranksize, MPI_FLOAT_INT, MPI_MAXLOC);
-        //cout << "Max trouvé " << out.value << " " << out.index << endl;
         q = out.index;
         int root = q%ranksize;
 
@@ -132,7 +128,6 @@ void invertParallel(Matrix& iA) {
                     // On soustrait la rangée k
                     // multipliée par l'élément k de la rangée courante
                     double lValue = lAI(i, k);
-                    //cout << "process " << myrank << " soustrait la rangée " << i << " par le k " << lValue << endl;
                     lAI.getRowSlice(i) -= lAI.getRowCopy(k)*lValue;
                 }
             }
@@ -145,26 +140,16 @@ void invertParallel(Matrix& iA) {
     }
 
 
-    //cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
-
-     //now we want to gather all the rows to process 0
-    //for(size_t i = 0; i<lAI.rows(); ++i) {
-        //if( (i % ranksize) == myrank && myrank != 0) {
-            //cout << "Rnk " << myrank << " envoie ligne " << i << endl;
-            //MPI::COMM_WORLD.Send(&lAI(i,0), lAI.cols(), MPI_DOUBLE, 0, 1234);
-        //}
-        //else if( (i % ranksize) != myrank && myrank == 0) {
-            //cout << "Rnk " << myrank << " recoit ligne " << i << endl;
-            //MPI::COMM_WORLD.Recv(&lAI(i,0), lAI.cols(), MPI_DOUBLE, MPI_ANY_SOURCE, 1234);
-        //}
-    //}
-
-
-
     //if(myrank == 1) {
-        cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
+        //cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
     //}
-    MPI::COMM_WORLD.Barrier();
+    //MPI::COMM_WORLD.Barrier();
+
+    // On copie la partie droite de la matrice AI ainsi transformée
+    // dans la matrice courante (this).
+    for (unsigned int i=0; i<iA.rows(); ++i) {
+        iA.getRowSlice(i) = lAI.getDataArray()[slice(i*lAI.cols()+iA.cols(), iA.cols(), 1)];
+    }
 
 
 }
@@ -204,39 +189,48 @@ int main(int argc, char** argv) {
     Matrix mainMatrixParallel = Matrix(lS, lS);
 
 
+    MPI::Init();
+    ranksize = MPI::COMM_WORLD.Get_size();
+    myrank = MPI::COMM_WORLD.Get_rank();
 
     //
     // section sequentielle
     //
-    MatrixRandom lA(lS, lS);
-    //cout << "Matrice random:\n" << lA.str() << endl;
-    mainMatrixSequential = lA;
-    invertSequential(mainMatrixSequential);
-    //cout << "Matrice inverse:\n" << mainMatrixSequential.str() << endl;
-    Matrix lRes = multiplyMatrix(lA, mainMatrixSequential);
-    //cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-    //cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
+    if ( myrank == 0 ) {
+        MatrixRandom lA(lS, lS);
+        //cout << "Matrice random:\n" << lA.str() << endl;
+        mainMatrixSequential = lA;
+
+        double t1, t2;
+        t1 = MPI_Wtime();
+        invertSequential(mainMatrixSequential);
+        t2 = MPI_Wtime();
+        printf( "Elapsed time is %f\n", t2 - t1 );
+
+        cout << "Matrice inverse:\n" << mainMatrixSequential.str() << endl;
+        Matrix lRes = multiplyMatrix(lA, mainMatrixSequential);
+        //cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        //cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
+
+        // seul le root creer la matrice random, puis on a la broadcast
+        mainMatrixParallel = lA;
+    }
 
     //
     // section parallele
     //
-    MPI::Init();
 
-    ranksize = MPI::COMM_WORLD.Get_size();
-    myrank = MPI::COMM_WORLD.Get_rank();
-
-    if ( myrank == 0 ) {
-        // seul le root creer la matrice random, puis on a la broadcast
-        MatrixRandom lAPara(lS, lS);
-        mainMatrixParallel = lAPara;
-    }
     // on bcast la matrice random nouvellement creer
     MPI::COMM_WORLD.Bcast(&mainMatrixParallel(0,0), lS*lS, MPI::DOUBLE, 0);
 
     // inversion de la matrice parallel
+    double t1, t2;
+    t1 = MPI_Wtime();
     invertParallel(mainMatrixParallel);
+    t2 = MPI_Wtime();
 
     if(myrank == 0) {
+        printf( "Elapsed time is %f\n", t2 - t1 );
         cout << "\nMatrice inverse parallele:\n" << mainMatrixParallel.str() << endl;
     }
 
