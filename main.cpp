@@ -82,8 +82,8 @@ void invertParallel(Matrix& iA) {
     // construire la matrice [A I]
     MatrixConcatCols lAI(iA, MatrixIdentity(iA.rows()));
 
-    for (size_t k=0; k < 1; ++k) {
-    //for (size_t k=0; k < lAI.rows(); ++k) {
+    //for (size_t k=0; k < 1; ++k) {
+    for (size_t k=0; k < lAI.rows(); ++k) {
 
         // on trouve le q localement (par processus)
         double lMax = 0.0;
@@ -132,24 +132,18 @@ void invertParallel(Matrix& iA) {
                     // On soustrait la rangée k
                     // multipliée par l'élément k de la rangée courante
                     double lValue = lAI(i, k);
-                    cout << "process " << myrank << " soustrait la rangée " << i << " par le k " << lValue << endl;
+                    //cout << "process " << myrank << " soustrait la rangée " << i << " par le k " << lValue << endl;
                     lAI.getRowSlice(i) -= lAI.getRowCopy(k)*lValue;
                 }
             }
         }
 
-
-        MPI::COMM_WORLD.Barrier();
-        for(int i = 0; i < lAI.rows(); ++i) {
-            if( (i % ranksize) == myrank) {
-                MPI::COMM_WORLD.Bcast(&lAI(i,0), lAI.cols(), MPI::DOUBLE, myrank);
-            }
+        for(size_t i = 0; i < lAI.rows(); ++i) {
+            MPI::COMM_WORLD.Bcast(&lAI(i,0), lAI.cols(), MPI::DOUBLE, i%ranksize);
         }
-        MPI::COMM_WORLD.Barrier();
 
     }
 
-    //MPI::COMM_WORLD.Gather(&lAI(myrank,0), lAI.cols(), MPI_DOUBLE, &lAI(myrank,0), lAI.cols(), MPI_DOUBLE, 0);
 
     //cout << "\nMatrice parallele du processus " << myrank << "\n" << lAI.str() << endl;
 
