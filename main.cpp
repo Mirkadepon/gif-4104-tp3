@@ -187,6 +187,7 @@ int main(int argc, char** argv) {
     // on initialise une matrix sequential et parallel pour comparaison
     Matrix mainMatrixSequential = Matrix(lS, lS);
     Matrix mainMatrixParallel = Matrix(lS, lS);
+    Matrix lA = Matrix(lS, lS);
 
 
     MPI::Init();
@@ -197,7 +198,8 @@ int main(int argc, char** argv) {
     // section sequentielle
     //
     if ( myrank == 0 ) {
-        MatrixRandom lA(lS, lS);
+        MatrixRandom lARandom(lS, lS);
+        lA = lARandom;
         //cout << "Matrice random:\n" << lA.str() << endl;
         mainMatrixSequential = lA;
 
@@ -209,8 +211,8 @@ int main(int argc, char** argv) {
 
         cout << "Matrice inverse:\n" << mainMatrixSequential.str() << endl;
         Matrix lRes = multiplyMatrix(lA, mainMatrixSequential);
-        //cout << "Produit des deux matrices:\n" << lRes.str() << endl;
-        //cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
+        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
 
         // seul le root creer la matrice random, puis on a la broadcast
         mainMatrixParallel = lA;
@@ -232,6 +234,9 @@ int main(int argc, char** argv) {
     if(myrank == 0) {
         printf( "Elapsed time is %f\n", t2 - t1 );
         cout << "\nMatrice inverse parallele:\n" << mainMatrixParallel.str() << endl;
+        Matrix lRes = multiplyMatrix(lA, mainMatrixParallel);
+        cout << "Produit des deux matrices:\n" << lRes.str() << endl;
+        cout << "Erreur: " << lRes.getDataArray().sum() - lS << endl;
     }
 
     MPI::Finalize();
